@@ -1,0 +1,17 @@
+# Хранилище доступа и маркер сброса пароля (никогда не коммитить)
+.wc1c-cleaner-auth.json
+.wc1c-cleaner-auth.json.tmp
+.wc1c-cleaner-reset
+
+# Локальные дампы и логи
+*.sql
+*.sql.gz
+*.log
+
+# Служебные файлы ОС и редакторов
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
