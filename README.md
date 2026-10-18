@@ -4,7 +4,6 @@
 [![WordPress](https://img.shields.io/badge/WordPress-5.6%2B-21759B?logo=wordpress&logoColor=white)](https://wordpress.org/)
 [![WooCommerce](https://img.shields.io/badge/WooCommerce-6%2B-96588A?logo=woocommerce&logoColor=white)](https://woocommerce.com/)
 [![MySQL](https://img.shields.io/badge/MySQL%20%2F%20MariaDB-5.7%2B-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](1c-data-cleaner.php)
 [![Single file](https://img.shields.io/badge/deploy-single%20file-informational)](1c-data-cleaner.php)
 
