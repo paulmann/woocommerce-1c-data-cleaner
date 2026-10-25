@@ -7,205 +7,208 @@
 [![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](1c-data-cleaner.php)
 [![Single file](https://img.shields.io/badge/deploy-single%20file-informational)](1c-data-cleaner.php)
 
-**Один PHP-файл для безопасного сброса устаревших ID обмена между 1С и WooCommerce: GUID товаров, цен и складов.** Инструмент предназначен для плагина **ItGalaxy WooCommerce Synchronization 1C — «WooCommerce — 1C:Предприятие — Обмен данными»** и нужен прежде всего после обновления конфигурации или версии 1С, когда идентификаторы в старом обмене перестают совпадать с актуальными данными.
+<!-- md-i18n:switcher -->
+**Read this in:** English · [Deutsch](README.de.md) · [中文](README.zh.md) · [हिन्दी](README.hi.md) · [Español](README.es.md) · [Русский](README.ru.md)
 
-Скрипт удаляет старые идентификаторы и связанные служебные данные, **не удаляя товары**. Во время следующей синхронизации плагин ItGalaxy находит товар **по артикулу** и записывает для него новый актуальный ID / GUID из 1С. Параллельно заново формируются привязки цен и складов.
+**One PHP file for safely resetting stale exchange IDs between 1C and WooCommerce: product, price and warehouse GUIDs.** The tool targets the **ItGalaxy WooCommerce Synchronization 1C** plugin — «WooCommerce — 1C:Enterprise — Data Exchange» — and is needed first of all after a configuration or 1C version upgrade, when the identifiers from the old exchange stop matching the current data.
+
+The script deletes the old identifiers and the related service data **without deleting products**. On the next synchronization the ItGalaxy plugin finds each product **by SKU** and writes its current ID / GUID from 1C. Price and warehouse links are rebuilt at the same time.
 
 > [!IMPORTANT]
-> Записи товаров и вариаций в `{prefix}posts` **никогда не удаляются**. Скрипт работает только с метаданными, служебными опциями и кэш-таблицей WooCommerce. Перед запуском обязательно сделайте резервную копию базы данных.
+> Product and variation records in `{prefix}posts` are **never deleted**. The script works only with metadata, service options and the WooCommerce cache table. Always back up the database before you run it.
 
 ---
 
-## Содержание
+## Table of contents
 
-- [Назначение и сценарий применения](#назначение-и-сценарий-применения)
-- [Как решается проблема GUID](#как-решается-проблема-guid)
-- [Возможности](#возможности)
-- [Что изменяется в базе данных](#что-изменяется-в-базе-данных)
-- [Требования](#требования)
-- [Установка](#установка)
-- [Первый запуск и пароль доступа](#первый-запуск-и-пароль-доступа)
-- [Сброс забытого пароля](#сброс-забытого-пароля)
-- [Режим отладки](#режим-отладки)
-- [Рабочий процесс](#рабочий-процесс)
-- [CLI-режим](#cli-режим)
-- [Архитектура и безопасность](#архитектура-и-безопасность)
-- [Бэкап и откат](#бэкап-и-откат)
-- [Диагностика](#диагностика)
+- [Purpose and use case](#purpose-and-use-case)
+- [How the GUID problem is solved](#how-the-guid-problem-is-solved)
+- [Features](#features)
+- [What changes in the database](#what-changes-in-the-database)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [First run and access password](#first-run-and-access-password)
+- [Resetting a forgotten password](#resetting-a-forgotten-password)
+- [Debug mode](#debug-mode)
+- [Workflow](#workflow)
+- [CLI mode](#cli-mode)
+- [Architecture and security](#architecture-and-security)
+- [Backup and rollback](#backup-and-rollback)
+- [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
-- [Дорожная карта](#дорожная-карта)
-- [Лицензия и автор](#лицензия-и-автор)
+- [Roadmap](#roadmap)
+- [License and author](#license-and-author)
 
 ---
 
-## Назначение и сценарий применения
+## Purpose and use case
 
-Скрипт разработан для работы с плагином ItGalaxy **WooCommerce Synchronization 1C / WooCommerce — 1C:Предприятие — Обмен данными**. Официальная документация и инструкции плагина доступны на сайте ITGALAXY: [«WooCommerce — 1C:Предприятие — Обмен данными — Инструкции»](https://itgalaxy.company/software/wordpress-woocommerce-1c-%D0%BF%D1%80%D0%B5%D0%B4%D0%BF%D1%80%D0%B8%D1%8F%D1%82%D0%B8%D0%B5-%D0%BE%D0%B1%D0%BC%D0%B5%D0%BD-%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D0%BC%D0%B8/woocommerce-1c%D0%BF%D1%80%D0%B5%D0%B4%D0%BF%D1%80%D0%B8%D1%8F%D1%82%D0%B8%D0%B5-%D0%BE%D0%B1%D0%BC%D0%B5%D0%BD-%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D0%BC%D0%B8-%D0%B8%D0%BD%D1%81/).
+The script is built for the ItGalaxy plugin **WooCommerce Synchronization 1C / WooCommerce — 1C:Enterprise — Data Exchange**. The official documentation and instructions for the plugin live on the ITGALAXY website: [«WooCommerce — 1C:Enterprise — Data Exchange — Instructions»](https://itgalaxy.company/software/wordpress-woocommerce-1c-%D0%BF%D1%80%D0%B5%D0%B4%D0%BF%D1%80%D0%B8%D1%8F%D1%82%D0%B8%D0%B5-%D0%BE%D0%B1%D0%BC%D0%B5%D0%BD-%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D0%BC%D0%B8/woocommerce-1c%D0%BF%D1%80%D0%B5%D0%B4%D0%BF%D1%80%D0%B8%D1%8F%D1%82%D0%B8%D0%B5-%D0%BE%D0%B1%D0%BC%D0%B5%D0%BD-%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D0%BC%D0%B8-%D0%B8%D0%BD%D1%81/).
 
-Типичный сценарий выглядит так:
+A typical scenario goes like this:
 
-1. На стороне 1С обновляют конфигурацию, переходят на новую версию 1С, восстанавливают базу из резервной копии, переносят справочники или меняют правила обмена.
-2. В результате GUID / ID товаров, типов цен или складов, ранее сохранённые плагином в WooCommerce, могут стать неактуальными или исчезнуть из новой версии 1С.
-3. Новый обмен не может корректно сопоставить часть объектов по старым ID: появляются дубли, «залипшие» цены, остатки или склады.
-4. Администратор запускает этот скрипт и очищает только устаревшие идентификаторы и связанные данные обмена.
-5. При следующем обмене плагин ItGalaxy выполняет сопоставление товаров **по артикулу** и прописывает новые ID / GUID из актуальной базы 1С.
-6. Цены и остатки загружаются заново в соответствии с текущими типами цен и складами в 1С.
+1. On the 1C side the configuration is upgraded, 1C moves to a new version, the database is restored from a backup, item master data is migrated or the exchange rules are changed.
+2. As a result, the product, price type or warehouse GUIDs / IDs that the plugin stored earlier in WooCommerce may become stale or disappear from the new 1C version.
+3. The new exchange cannot match some objects by their old IDs: duplicates appear, plus "stuck" prices, stock or warehouses.
+4. The administrator runs this script and clears only the outdated identifiers and the related exchange data.
+5. On the next exchange the ItGalaxy plugin matches products **by SKU** and writes the new IDs / GUIDs from the current 1C database.
+6. Prices and stock are loaded again according to the current price types and warehouses in 1C.
 
-Именно поэтому это не «удалятор каталога», а сервисная утилита для контролируемого перепривязывания существующих товаров к обновлённой 1С.
+That is exactly why this is not a "catalog deleter" but a service utility for controlled re-linking of existing products to an updated 1C.
 
-### Какие симптомы устраняет
+### Which symptoms it removes
 
-- После обновления 1С товары начали дублироваться при обмене.
-- Цены не обновляются, остаются пустыми или относятся к старым типам цен.
-- Остатки по складам не приходят, отображаются некорректно или «прилипли» от старой базы.
-- В настройках плагина и списках WooCommerce остаются несуществующие цены, склады или GUID.
-- Нужно подключить существующий каталог WooCommerce к новой или восстановленной базе 1С без ручного удаления товаров.
+- After the 1C upgrade products started duplicating during the exchange.
+- Prices are not updated, stay empty or belong to old price types.
+- Warehouse stock does not arrive, is displayed incorrectly or is "stuck" from the old database.
+- Non-existent prices, warehouses or GUIDs remain in the plugin settings and WooCommerce lists.
+- An existing WooCommerce catalog has to be connected to a new or restored 1C database without deleting products by hand.
 
 > [!WARNING]
-> Перед очисткой убедитесь, что в 1С у товаров заполнены и уникальны артикулы. Именно артикул используется как точка повторного сопоставления товара при следующей синхронизации. Если у разных товаров одинаковый артикул или артикул отсутствует, автоматическое сопоставление может быть неоднозначным.
+> Before cleaning, make sure the SKUs in 1C are filled in and unique. The SKU is precisely the key used to re-match a product on the next synchronization. If different products share one SKU, or a SKU is missing, automatic matching may be ambiguous.
 
 ---
 
-## Как решается проблема GUID
+## How the GUID problem is solved
 
-### До очистки
+### Before cleaning
 
 ```text
-WooCommerce                         Старая / обновлённая 1С
-───────────                         ──────────────────────
-Товар: «Аккумулятор X»              Товар: «Аккумулятор X»
-Артикул: BAT-X-100                  Артикул: BAT-X-100
+WooCommerce                         Old / updated 1C
+───────────                         ──────────────────
+Product: "Battery X"                Product: "Battery X"
+SKU: BAT-X-100                      SKU: BAT-X-100
 _id_1c: OLD-GUID-123   ────────X──> GUID: NEW-GUID-987
 ```
 
-После обновления 1С старый `OLD-GUID-123`, ранее записанный в `wp_postmeta`, может отсутствовать или соответствовать уже другому объекту. Плагин не должен продолжать использовать устаревшую привязку.
+After the 1C upgrade the old `OLD-GUID-123` that was written earlier into `wp_postmeta` may be missing or may already belong to a different object. The plugin must not keep using the stale link.
 
-### После очистки и нового обмена
+### After cleaning and a new exchange
 
 ```text
-1. Скрипт удаляет старый _id_1c, старые данные цен / остатков и карты соответствий.
+1. The script deletes the old _id_1c, the old price / stock data and the GUID maps.
 
-2. Плагин ItGalaxy выполняет обмен:
+2. The ItGalaxy plugin runs the exchange:
 
-WooCommerce                         1С
+WooCommerce                         1C
 ───────────                         ──────────────────────
-Товар: «Аккумулятор X»              Товар: «Аккумулятор X»
-Артикул: BAT-X-100   <───────────>  Артикул: BAT-X-100
+Product: "Battery X"                Product: "Battery X"
+SKU: BAT-X-100   <───────────>      SKU: BAT-X-100
 
-3. Сопоставление по артикулу успешно:
+3. Matching by SKU succeeds:
    WooCommerce postmeta._id_1c = NEW-GUID-987
-   WooCommerce получает актуальные цены и остатки.
+   WooCommerce receives current prices and stock.
 ```
 
-Таким образом, скрипт создаёт «чистую точку старта» для повторной синхронизации. Он не генерирует GUID сам и не меняет данные номенклатуры: актуальные идентификаторы задаёт 1С, а плагин ItGalaxy записывает их в WordPress во время обмена.
+So the script creates a "clean starting point" for a repeated synchronization. It does not generate GUIDs itself and does not change item master data: 1C supplies the current identifiers, and the ItGalaxy plugin writes them into WordPress during the exchange.
 
 ---
 
-## Возможности
+## Features
 
-- **Целевое назначение:** работа с ItGalaxy WooCommerce Synchronization 1C / WooCommerce — 1C:Предприятие — Обмен данными.
-- **Четыре операции:** очистка GUID 1С, цен, остатков или полная очистка всех трёх групп в одной транзакции.
-- **Без удаления каталога:** записи `posts`, товары, вариации, названия, описания, изображения, категории и артикулы не удаляются.
-- **Предпросмотр:** до запуска видны количества товаров, GUID, записей цен и остатков, типов цен и складов.
-- **Автопоиск WordPress:** параметры БД читаются из `wp-config.php`; файл ищется в каталоге скрипта и до трёх уровней выше.
-- **Транзакции:** `START TRANSACTION` → операции → `COMMIT`; при исключении выполняется `ROLLBACK`.
-- **Prepared statements:** PDO MySQL приоритетно, mysqli как фолбэк; пользовательские значения не конкатенируются в SQL.
-- **Пароль и ACL:** при первом запуске создаётся пароль, хранится только его хеш, авторизованный IP запоминается на 30 суток.
-- **AJAX-интерфейс:** страница не перезагружается; кнопка на время операции меняет состояние, остальные блокируются, ошибки в консоли не стираются.
-- **Режим отладки:** полный журнал серверных и клиентских событий, SQL, количество строк и тайминги — из переключателя интерфейса или через `?debug=1`.
-- **CLI-восстановление доступа:** команды проверки, генерации и ручной установки пароля.
-- **Один файл:** без Composer, дополнительных библиотек и загрузки WordPress.
+- **Target scope:** works with ItGalaxy WooCommerce Synchronization 1C / WooCommerce — 1C:Enterprise — Data Exchange.
+- **Four operations:** cleaning 1C GUIDs, prices, stock, or a complete clean of all three groups in one transaction.
+- **No catalog deletion:** `posts` records, products, variations, titles, descriptions, images, categories and SKUs are not deleted.
+- **Preview:** before a run you see the counts of products, GUIDs, price and stock rows, price types and warehouses.
+- **WordPress auto-discovery:** database parameters are read from `wp-config.php`; the file is looked up in the script directory and up to three levels above it.
+- **Transactions:** `START TRANSACTION` → operations → `COMMIT`; on an exception `ROLLBACK` runs.
+- **Prepared statements:** PDO MySQL preferred, mysqli as a fallback; user values are never concatenated into SQL.
+- **Password and ACL:** a password is created on the first run, only its hash is stored, an authorized IP is remembered for 30 days.
+- **AJAX interface:** the page does not reload; the button changes state for the duration of the operation, the other buttons are blocked, console errors are not cleared.
+- **Debug mode:** a full log of server and client events, SQL, row counts and timings — from the interface toggle or via `?debug=1`.
+- **CLI access recovery:** commands to check, generate and set the password manually.
+- **One file:** no Composer, no extra libraries and no WordPress bootstrap.
 
 ---
 
-## Что изменяется в базе данных
+## What changes in the database
 
-`{prefix}` — значение `$table_prefix` из `wp-config.php`; для стандартной установки WordPress это `wp_`.
+`{prefix}` is the value of `$table_prefix` from `wp-config.php`; for a standard WordPress installation it is `wp_`.
 
-| Данные обмена ItGalaxy | Где хранятся | Действие скрипта |
+| ItGalaxy exchange data | Where it is stored | What the script does |
 |---|---|---|
-| GUID товара и вариации | `{prefix}postmeta.meta_key = '_id_1c'` | Удаление для `product` и `product_variation` |
-| GUID категории и метки | `{prefix}termmeta.meta_key = '_id_1c'` | Удаление старых ID |
-| GUID атрибута | `{prefix}woocommerce_attribute_taxonomies.id_1c` | Очистка поля в пустую строку |
-| Карты GUID | `{prefix}options`: `all1cProducts`, `currentAll1cGroup`, `itglx_wc1c_nomenclature_categories` | Замена значения на пустой сериализованный массив |
-| Цены по типам цен | `{prefix}postmeta.meta_key = '_all_prices'` | Удаление |
-| Базовые цены WooCommerce | `{prefix}postmeta`: `_price`, `_regular_price`, `_sale_price` | Удаление — актуальные значения придут из 1С |
-| Список типов цен | `{prefix}options.option_name = 'all_prices_types'` | Очистка массива |
-| Настройки соответствий типов цен | `wc-itgalaxy-1c-exchange-settings`, ключи `price_type_*` | Удаление ключей `price_type_N`, `price_type_N_text`, `price_type_N_summ` |
-| Остатки по складам | `{prefix}postmeta.meta_key = '_separate_warehouse_stock'` | Удаление |
-| Суммарный остаток | `{prefix}postmeta.meta_key = '_stock'` | Удаление |
-| Список складов | `{prefix}options.option_name = 'all_1c_stocks'` | Очистка массива |
-| Статусы наличия | `{prefix}postmeta`: `_stock_status`, `_manage_stock`, `_backorders` | Нейтральные значения: `instock`, `no`, `no` |
-| Кэш цен WooCommerce | `{prefix}wc_product_meta_lookup`: `min_price`, `max_price`, `onsale` | Обнуление |
-| Кэш остатков WooCommerce | `{prefix}wc_product_meta_lookup`: `stock_quantity`, `stock_status` | `0` и `instock` |
+| Product and variation GUID | `{prefix}postmeta.meta_key = '_id_1c'` | Deletion for `product` and `product_variation` |
+| Category and tag GUID | `{prefix}termmeta.meta_key = '_id_1c'` | Deletion of the old IDs |
+| Attribute GUID | `{prefix}woocommerce_attribute_taxonomies.id_1c` | Field cleared to an empty string |
+| GUID maps | `{prefix}options`: `all1cProducts`, `currentAll1cGroup`, `itglx_wc1c_nomenclature_categories` | Value replaced with an empty serialized array |
+| Prices by price type | `{prefix}postmeta.meta_key = '_all_prices'` | Deletion |
+| Base WooCommerce prices | `{prefix}postmeta`: `_price`, `_regular_price`, `_sale_price` | Deletion — the current values arrive from 1C |
+| Price type list | `{prefix}options.option_name = 'all_prices_types'` | Array cleared |
+| Price type mapping settings | `wc-itgalaxy-1c-exchange-settings`, keys `price_type_*` | Deletion of the keys `price_type_N`, `price_type_N_text`, `price_type_N_summ` |
+| Stock by warehouse | `{prefix}postmeta.meta_key = '_separate_warehouse_stock'` | Deletion |
+| Total stock | `{prefix}postmeta.meta_key = '_stock'` | Deletion |
+| Warehouse list | `{prefix}options.option_name = 'all_1c_stocks'` | Array cleared |
+| Stock statuses | `{prefix}postmeta`: `_stock_status`, `_manage_stock`, `_backorders` | Neutral values: `instock`, `no`, `no` |
+| WooCommerce price cache | `{prefix}wc_product_meta_lookup`: `min_price`, `max_price`, `onsale` | Zeroing |
+| WooCommerce stock cache | `{prefix}wc_product_meta_lookup`: `stock_quantity`, `stock_status` | `0` and `instock` |
 
-Отсутствующие таблицы `woocommerce_attribute_taxonomies` и `wc_product_meta_lookup` определяются автоматически и пропускаются с записью в журнал.
+A missing `woocommerce_attribute_taxonomies` or `wc_product_meta_lookup` table is detected automatically and skipped with a log entry.
 
-### Соответствие кнопок и сценариев
+### Button and scenario mapping
 
-| Кнопка | Что очищается | Когда использовать |
+| Button | What is cleaned | When to use it |
 |---|---|---|
-| **Очистить GUID 1С** | Старые `_id_1c`, GUID категорий/меток/атрибутов и карты GUID | После обновления/переноса 1С, при дублях и неверных привязках |
-| **Очистить цены** | Старые цены, типы цен, `price_type_*`, кэш цен | Если после обновления 1С изменились типы цен или цены не синхронизируются |
-| **Очистить остатки** | Старые остатки, склады, статусы наличия и кэш | Если изменились склады, остатки «зависли» или не приходят из 1С |
-| **Очистить всё** | Все перечисленные группы в одной транзакции | После комплексного обновления/переноса базы 1С |
+| **«Очистить GUID 1С»** (Clear 1C GUIDs) | Old `_id_1c`, category/tag/attribute GUIDs and GUID maps | After a 1C upgrade or migration, with duplicates and wrong links |
+| **«Очистить цены»** (Clear prices) | Old prices, price types, `price_type_*`, price cache | When price types changed after the 1C upgrade or prices do not synchronize |
+| **«Очистить остатки»** (Clear stock) | Old stock, warehouses, stock statuses and cache | When warehouses changed, stock is "stuck" or does not arrive from 1C |
+| **«Очистить всё»** (Clear everything) | All the groups above in one transaction | After a comprehensive upgrade or migration of the 1C database |
 
 ---
 
-## Требования
+## Requirements
 
-| Компонент | Минимум | Примечание |
+| Component | Minimum | Note |
 |---|---|---|
-| PHP | 8.3 | Используются `enum`, `readonly`, `match`, строгая типизация |
-| Расширения PHP | `pdo_mysql` **или** `mysqli` | PDO используется приоритетно; также нужны стандартные `json`, `session`, `hash` |
-| MySQL / MariaDB | MySQL 5.7 / MariaDB 10.3 | Поддержка транзакций InnoDB и `DELETE … INNER JOIN` |
-| WordPress | 5.6+ | Нужен читаемый `wp-config.php` |
-| WooCommerce | 6+ | Таблица lookup необязательна, её отсутствие обработано |
-| Плагин обмена | ItGalaxy WooCommerce Synchronization 1C | «WooCommerce — 1C:Предприятие — Обмен данными» |
-| Права файловой системы | Запись в каталог скрипта | Для файла хеша пароля и ACL |
-| Браузер | Современный | `fetch`, `URL`, опционально Clipboard API |
+| PHP | 8.3 | `enum`, `readonly`, `match` and strict typing are used |
+| PHP extensions | `pdo_mysql` **or** `mysqli` | PDO is preferred; the standard `json`, `session` and `hash` are also required |
+| MySQL / MariaDB | MySQL 5.7 / MariaDB 10.3 | InnoDB transactions and `DELETE … INNER JOIN` support |
+| WordPress | 5.6+ | A readable `wp-config.php` is required |
+| WooCommerce | 6+ | The lookup table is optional, its absence is handled |
+| Exchange plugin | ItGalaxy WooCommerce Synchronization 1C | «WooCommerce — 1C:Enterprise — Data Exchange» |
+| File system rights | Write access to the script directory | For the password hash file and the ACL |
+| Browser | Modern | `fetch`, `URL`, optionally the Clipboard API |
 
 ---
 
-## Установка
+## Installation
 
-### 1. Сделайте бэкап базы данных
+### 1. Back up the database
 
 ```bash
-# Полный резервный дамп перед очисткой
+# Full backup dump before cleaning
 mysqldump --single-transaction --routines --triggers -u USER -p DBNAME \
   | gzip > backup-before-wc1c-clean-$(date +%F-%H%M).sql.gz
 ```
 
-### 2. Скачайте скрипт в корень WordPress
+### 2. Download the script into the WordPress root
 
-Файл должен лежать рядом с `wp-config.php` либо не глубже трёх уровней от него.
+The file must sit next to `wp-config.php` or no deeper than three levels away from it.
 
 ```bash
 cd /var/www/example.com/public_html
 curl -fsSLO https://raw.githubusercontent.com/paulmann/woocommerce-1c-data-cleaner/main/1c-data-cleaner.php
 
-# Пример прав — скорректируйте пользователя веб-сервера для своего окружения
+# Example permissions — adjust the web server user for your environment
 chmod 640 1c-data-cleaner.php
 chown www-data:www-data 1c-data-cleaner.php
 ```
 
-### 3. Ограничьте доступ на уровне веб-сервера
+### 3. Restrict access at the web server level
 
-Пароль скрипта не заменяет сетевую защиту. Рекомендуется дополнительно разрешить доступ только со своего IP.
+The script password does not replace network protection. As an extra safeguard it is recommended to allow access from your own IP only.
 
 **Nginx:**
 
 ```nginx
 location = /1c-data-cleaner.php {
-    allow 203.0.113.10; # Замените на свой внешний IP
+    allow 203.0.113.10; # Replace with your own external IP
     deny all;
 
     include fastcgi_params;
     fastcgi_pass unix:/run/php/php8.3-fpm.sock;
 }
 
-# Хранилище авторизации и файл-маркер никогда не должны отдаваться по HTTP
+# The auth store and the reset marker must never be served over HTTP
 location ~ /\.wc1c-cleaner- {
     deny all;
     return 404;
@@ -224,27 +227,27 @@ location ~ /\.wc1c-cleaner- {
 </FilesMatch>
 ```
 
-### 4. Откройте интерфейс
+### 4. Open the interface
 
-Откройте в браузере:
+Open in your browser:
 
 ```text
 https://example.com/1c-data-cleaner.php
 ```
 
-При первом запуске скрипт сгенерирует пароль, авторизует текущую сессию и покажет пароль только один раз.
+On the first run the script generates a password, authorizes the current session and shows the password only once.
 
 ---
 
-## Первый запуск и пароль доступа
+## First run and access password
 
-При первом обращении выполняются следующие действия:
+On the first request the following happens:
 
-1. Генерируется пароль из 20 символов криптографически безопасным генератором `random_int()`.
-2. В `.wc1c-cleaner-auth.json` записывается **только хеш** пароля: Argon2id, если он доступен в PHP, иначе bcrypt через `PASSWORD_DEFAULT`.
-3. Файл записывается атомарно (`.tmp` + `rename`) и получает права `0600`.
-4. Текущий пользователь автоматически получает доступ, а его IP добавляется в ACL.
-5. Пароль отображается один раз с возможностью копирования.
+1. A 20-character password is generated with the cryptographically secure `random_int()` generator.
+2. **Only the hash** of the password is written to `.wc1c-cleaner-auth.json`: Argon2id when PHP provides it, otherwise bcrypt through `PASSWORD_DEFAULT`.
+3. The file is written atomically (`.tmp` + `rename`) and receives `0600` permissions.
+4. The current user is authorized automatically, and their IP is added to the ACL.
+5. The password is displayed once, with a copy option.
 
 ```text
 ┌────────────────────────────────────────────────────────────────────┐
@@ -257,67 +260,67 @@ https://example.com/1c-data-cleaner.php
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-### Модель доступа
+### Access model
 
-- Текущая PHP-сессия авторизована, поэтому пароль не спрашивается повторно до завершения сессии.
-- Успешно авторизованный IP записывается в ACL на 30 суток. Сам IP в файле не хранится: используется `HMAC-SHA-256` с отдельной случайной солью.
-- С другого IP или компьютера будет показана форма входа — потребуется сохранённый пароль.
-- После 8 неудачных попыток в рамках одной сессии дальнейший ввод блокируется; на каждый неверный пароль добавляется задержка 400 мс.
-- «Выйти и забыть IP» уничтожает сессию и удаляет текущий IP из ACL.
+- The current PHP session is authorized, so the password is not asked again until the session ends.
+- A successfully authorized IP is written into the ACL for 30 days. The IP itself is not stored in the file: `HMAC-SHA-256` with a separate random salt is used.
+- From another IP or computer a sign-in form is shown — the saved password is required.
+- After 8 failed attempts within one session further input is blocked; every wrong password adds a 400 ms delay.
+- «Выйти и забыть IP» (Sign out and forget this IP) destroys the session and removes the current IP from the ACL.
 
 > [!NOTE]
-> Если сайт находится за обратным прокси или Cloudflare, при необходимости включите `Config::TRUST_PROXY = true`. Делайте это только если прокси корректно перезаписывает клиентский IP: при прямом доступе заголовок `X-Forwarded-For` может быть подделан.
+> If the site sits behind a reverse proxy or Cloudflare, enable `Config::TRUST_PROXY = true` when needed. Do it only when the proxy rewrites the client IP correctly: on direct access the `X-Forwarded-For` header can be forged.
 
 ---
 
-## Сброс забытого пароля
+## Resetting a forgotten password
 
-Сброс меняет соль ACL, поэтому всем клиентам — включая ранее доверенные IP — потребуется снова ввести новый пароль.
+A reset changes the ACL salt, so every client — including previously trusted IPs — has to enter the new password again.
 
-### Способ 1: SSH / CLI — рекомендуется
+### Option 1: SSH / CLI — recommended
 
 ```bash
-# Показать состояние хранилища доступа
+# Show the state of the access store
 php 1c-data-cleaner.php --status
 
-# Сгенерировать новый пароль и вывести его в консоль
+# Generate a new password and print it to the console
 php 1c-data-cleaner.php --reset
 
-# Задать свой пароль вручную, минимум 10 символов
-php 1c-data-cleaner.php --set-password='НовыйСложныйПароль'
+# Set your own password manually, at least 10 characters
+php 1c-data-cleaner.php --status
 ```
 
-### Способ 2: FTP или файловый менеджер
+### Option 2: FTP or a file manager
 
-Удалите файл хранилища рядом со скриптом:
+Delete the store file next to the script:
 
 ```bash
 rm /var/www/example.com/public_html/.wc1c-cleaner-auth.json
 ```
 
-При следующем открытии страницы будет создан новый пароль и показан один раз.
+The next time the page is opened, a new password is created and shown once.
 
-### Способ 3: файл-маркер сброса
+### Option 3: reset marker file
 
-Если можно создавать файлы, но нежелательно удалять существующие:
+If files can be created but existing ones should not be deleted:
 
 ```bash
 touch /var/www/example.com/public_html/.wc1c-cleaner-reset
 ```
 
-При следующем HTTP-запросе скрипт удалит старое хранилище, удалит маркер и создаст новую пару «пароль + ACL».
+On the next HTTP request the script deletes the old store, deletes the marker and creates a new password + ACL pair.
 
 ---
 
-## Режим отладки
+## Debug mode
 
-Режим отладки включается без изменения кода:
+Debug mode is switched on without touching the code:
 
-- переключателем **«Режим отладки»** в верхней части интерфейса;
-- URL-параметром `?debug=1` для включения;
-- URL-параметром `?debug=0` для выключения.
+- by the **«Режим отладки»** (Debug mode) toggle at the top of the interface;
+- by the `?debug=1` URL parameter to enable it;
+- by the `?debug=0` URL parameter to disable it.
 
-Состояние сохраняется в текущей PHP-сессии. При включённом debug скрипт показывает и отправляет в консоль браузера полный журнал:
+The state is kept in the current PHP session. With debug on, the script displays and sends to the browser console a full log:
 
 ```text
 +    0.31 ms  INFO  Входящий запрос {"method":"POST","php":"8.3.14","debug":true}
@@ -329,34 +332,34 @@ touch /var/www/example.com/public_html/.wc1c-cleaner-reset
 +  512.90 ms  INFO  Транзакция COMMIT
 ```
 
-В журнал входят: события авторизации и ACL, проверка CSRF, поиск `wp-config.php`, драйвер БД, SQL-запросы и их тайминги, границы транзакций, число затронутых строк, предпросмотр до и после очистки, а также JavaScript-ошибки и сетевые ошибки клиента. Пароли, хеши, токены и соли маскируются как `***`.
+The log covers authorization and ACL events, CSRF validation, the `wp-config.php` lookup, the database driver, SQL queries and their timings, transaction boundaries, the number of affected rows, the preview before and after cleaning, plus JavaScript errors and client network errors. Passwords, hashes, tokens and salts are masked as `***`.
 
 ---
 
-## Рабочий процесс
+## Workflow
 
-1. Проверьте, что в актуальной 1С у товаров заполнены корректные и уникальные артикулы.
-2. Создайте бэкап БД.
-3. Остановите автоматический обмен с 1С на время работ, если он выполняется по расписанию.
-4. Загрузите `1c-data-cleaner.php` в каталог WordPress и откройте его в браузере.
-5. На первом запуске сохраните сгенерированный пароль.
-6. Включите режим отладки, если хотите зафиксировать подробный ход операции.
-7. Изучите таблицу **«Текущее состояние»** и выберите нужную область очистки.
-8. Отметьте галочку «Я понимаю, что данные будут удалены, бэкап сделан».
-9. Нажмите кнопку очистки и подтвердите действие в диалоговом окне.
-10. Убедитесь, что в блоке «Результат» нет ошибок, а в debug-журнале есть `Транзакция COMMIT`.
-11. Запустите синхронизацию в плагине ItGalaxy. Товары будут сопоставлены по артикулу, после чего плагин создаст актуальные GUID / ID, цены и остатки.
-12. Проверьте несколько товаров, цены и остатки в витрине и панели WordPress.
-13. Удалите `1c-data-cleaner.php`, `.wc1c-cleaner-auth.json` и возможный `.wc1c-cleaner-reset` с сервера.
+1. Check that the products in the current 1C have correct and unique SKUs.
+2. Create a database backup.
+3. Stop the automatic exchange with 1C for the duration of the work if it runs on a schedule.
+4. Upload `1c-data-cleaner.php` to the WordPress directory and open it in a browser.
+5. On the first run, save the generated password.
+6. Enable debug mode if you want to capture the detailed progress of the operation.
+7. Review the **«Текущее состояние»** (Current state) table and choose the cleaning scope you need.
+8. Tick the checkbox «Я понимаю, что данные будут удалены, бэкап сделан» (I understand the data will be deleted and a backup exists).
+9. Press the cleaning button and confirm the action in the dialog.
+10. Make sure the «Результат» (Result) block contains no errors and the debug log contains `Транзакция COMMIT`.
+11. Start the synchronization in the ItGalaxy plugin. Products are matched by SKU, after which the plugin creates the current GUIDs / IDs, prices and stock.
+12. Check several products, prices and stock in the storefront and in the WordPress admin.
+13. Delete `1c-data-cleaner.php`, `.wc1c-cleaner-auth.json` and a possible `.wc1c-cleaner-reset` from the server.
 
 > [!TIP]
-> При комплексном обновлении 1С обычно достаточно один раз использовать «Очистить всё», затем запустить полный обмен. При локальной проблеме безопаснее выбирать целевую кнопку: например, только «Очистить цены», если изменились исключительно типы цен.
+> For a comprehensive 1C upgrade one run of «Очистить всё» (Clear everything) is usually enough, followed by a full exchange. For a local problem it is safer to pick the targeted button: for example «Очистить цены» (Clear prices) only, if nothing but the price types changed.
 
 ---
 
-## CLI-режим
+## CLI mode
 
-CLI-режим предназначен только для управления доступом, не для удаления данных БД.
+CLI mode is intended for access management only, not for deleting database data.
 
 ```bash
 $ php 1c-data-cleaner.php --status
@@ -367,55 +370,55 @@ WooCommerce 1C Data Cleaner 3.0.0
 Доверенных IP: 2
 ```
 
-| Команда | Результат |
+| Command | Result |
 |---|---|
-| `php 1c-data-cleaner.php --status` | Статус файла доступа, дата создания, число доверенных IP |
-| `php 1c-data-cleaner.php --reset` | Создаёт и печатает новый случайный пароль, сбрасывает ACL |
-| `php 1c-data-cleaner.php --set-password='…'` | Устанавливает пароль администратора длиной от 10 символов и сбрасывает ACL |
-| `php 1c-data-cleaner.php --help` | Печатает краткую памятку |
+| `php 1c-data-cleaner.php --status` | Status of the access file, creation date, number of trusted IPs |
+| `php 1c-data-cleaner.php --reset` | Creates and prints a new random password, resets the ACL |
+| `php 1c-data-cleaner.php --set-password='…'` | Sets an administrator password of at least 10 characters and resets the ACL |
+| `php 1c-data-cleaner.php --help` | Prints a short cheat sheet |
 
 ---
 
-## Архитектура и безопасность
+## Architecture and security
 
-Скрипт состоит из одного PHP-файла с `declare(strict_types=1)` и разделён на небольшие компоненты.
+The script is a single PHP file with `declare(strict_types=1)`, split into small components.
 
-| Компонент | Ответственность |
+| Component | Responsibility |
 |---|---|
-| `Config` | Версия, метаданные, наборы ключей обмена, TTL ACL, путь к служебным файлам |
-| `EventLog` | Журнал событий с таймингами и маскированием чувствительных значений |
-| `Credentials` | Генерация и хеширование пароля, ACL по IP, атомарная запись хранилища, reset-marker |
-| `Session` / `Debug` | Безопасные cookie, CSRF, хранение и переключение режима отладки |
-| `Auth` | Авторизация по сессии, IP и паролю, лимит попыток, выход |
-| `WpConfig` | Поиск и безопасный разбор параметров `wp-config.php` без его подключения |
-| `Db` | PDO/mysqli, prepared statements, транзакции, валидация идентификаторов таблиц |
-| `Action` | Строгое перечисление доступных операций |
-| `Cleaner` | Очистка GUID, цен, складов и служебных карт |
-| `Preview` | Подсчёт данных до и после действий |
+| `Config` | Version, metadata, exchange key sets, ACL TTL, path to the service files |
+| `EventLog` | Event log with timings and masking of sensitive values |
+| `Credentials` | Password generation and hashing, per-IP ACL, atomic store writes, reset marker |
+| `Session` / `Debug` | Secure cookies, CSRF, storage and toggling of debug mode |
+| `Auth` | Authorization by session, IP and password, attempt limit, sign-out |
+| `WpConfig` | Lookup and safe parsing of `wp-config.php` parameters without including it |
+| `Db` | PDO/mysqli, prepared statements, transactions, table identifier validation |
+| `Action` | Strict enumeration of the available operations |
+| `Cleaner` | Cleaning of GUIDs, prices, stock and service maps |
+| `Preview` | Counting data before and after the actions |
 | JSON API | `login`, `logout`, `ack_password`, `set_debug`, `preview`, `guid`, `prices`, `stocks`, `all` |
 
-### Меры защиты
+### Safeguards
 
-- нет SQL-конкатенации пользовательских значений: используются подготовленные выражения;
-- имена таблиц валидируются регулярным выражением `[A-Za-z0-9_]+`;
-- `unserialize()` вызывается с `allowed_classes => false`;
-- CSRF-токен создаётся через `random_bytes(32)`, проверяется через `hash_equals`;
-- после успешной авторизации обновляется ID сессии;
-- cookie сессии имеют `HttpOnly`, `SameSite=Strict`, а при HTTPS — `Secure`;
-- ответы имеют `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow` и meta robots;
-- `display_errors=0`: PHP notices и warnings попадают в EventLog, не ломая JSON-ответ;
-- `.gitignore` исключает хранилище пароля, ACL и reset-marker.
+- no SQL concatenation of user values: prepared statements are used;
+- table names are validated with the `[A-Za-z0-9_]+` regular expression;
+- `unserialize()` is called with `allowed_classes => false`;
+- the CSRF token is created with `random_bytes(32)` and checked with `hash_equals`;
+- the session ID is regenerated after a successful authorization;
+- session cookies carry `HttpOnly`, `SameSite=Strict` and, over HTTPS, `Secure`;
+- responses carry `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow` and a meta robots tag;
+- `display_errors=0`: PHP notices and warnings go to the EventLog without breaking the JSON response;
+- `.gitignore` excludes the password store, the ACL and the reset marker.
 
 > [!WARNING]
-> Скрипт предоставляет прямой доступ к БД и выполняет массовые `DELETE` / `UPDATE`. Не оставляйте его в публичном web-root после завершения работ. Пароль не является заменой ограничения IP через Nginx, Apache, VPN или HTTP Basic Auth.
+> The script provides direct access to the database and performs bulk `DELETE` / `UPDATE`. Do not leave it in a public web root after the work is finished. The password is no substitute for restricting IPs through Nginx, Apache, a VPN or HTTP Basic Auth.
 
 ---
 
-## Бэкап и откат
+## Backup and rollback
 
-### Быстрый бэкап затрагиваемых таблиц
+### Quick backup of the affected tables
 
-Замените `wp_` на фактический префикс таблиц, если он отличается.
+Replace `wp_` with the actual table prefix if it differs.
 
 ```bash
 mysqldump --single-transaction -u USER -p DBNAME \
@@ -427,96 +430,96 @@ mysqldump --single-transaction -u USER -p DBNAME \
   | gzip > wc1c-before-clean-$(date +%F-%H%M).sql.gz
 ```
 
-### Восстановление из дампа
+### Restoring from a dump
 
 ```bash
 gunzip < wc1c-before-clean-2026-08-27-1542.sql.gz | mysql -u USER -p DBNAME
 ```
 
-После восстановления или нового полного обмена можно очистить кэш:
+After a restore or a new full exchange the cache can be cleared:
 
 ```bash
 wp cache flush
 wp wc update_db
 ```
 
-Транзакция защищает от частичного применения действий только **внутри одного запуска**: если произошла ошибка до `COMMIT`, выполняется `ROLLBACK`. После успешного `COMMIT` откат возможен только восстановлением из резервной копии.
+The transaction protects against partially applied actions only **within a single run**: if an error occurs before `COMMIT`, a `ROLLBACK` is executed. After a successful `COMMIT` the only way back is restoring from a backup.
 
 ---
 
-## Диагностика
+## Troubleshooting
 
-| Симптом | Возможная причина | Решение |
+| Symptom | Possible cause | Solution |
 |---|---|---|
-| «Файл wp-config.php не найден» | Скрипт расположен дальше чем в трёх уровнях от WordPress | Переместите его в корень WordPress рядом с `wp-config.php` |
-| «Не удалось распознать DB_NAME / DB_USER / $table_prefix» | В `wp-config.php` параметры заданы нестандартно, например через `getenv()` | Используйте строковые `define()` либо адаптируйте `WpConfig::parse()` под своё окружение |
-| «На сервере не включено ни PDO MySQL, ни mysqli» | Отсутствуют PHP-расширения работы с MySQL | Включите `pdo_mysql` или `mysqli` в панели хостинга / `php.ini` |
-| «Недействительный токен сессии» | Сессия истекла, cookie заблокированы, балансировщик не держит session affinity | Обновите страницу, разрешите cookie, проверьте конфигурацию PHP sessions |
-| Пароль не сохраняется | У каталога скрипта нет прав записи, используется временная папка | Дайте веб-пользователю право записи в каталог скрипта |
-| Кнопка долго показывает «Выполняется…» | Большая таблица `postmeta`, блокировка MySQL или таймаут PHP-FPM | Включите debug, найдите долгий SQL, проверьте индексы и `request_terminate_timeout` |
-| После очистки цены или остатки пустые | Это ожидаемое состояние до следующего обмена | Запустите обмен в ItGalaxy и дождитесь завершения |
-| После обмена появились дубли | Не совпадают или не уникальны артикулы | Исправьте артикулы в 1С и WooCommerce, удалите некорректные дубли, повторите контролируемый обмен |
-| Остатки старые после обмена | Кэш объектов, страницы или CDN | `wp cache flush`, сбросьте кэш WooCommerce и CDN |
+| «Файл wp-config.php не найден» | The script sits more than three levels away from WordPress | Move it into the WordPress root next to `wp-config.php` |
+| «Не удалось распознать DB_NAME / DB_USER / $table_prefix» | The parameters in `wp-config.php` are set in a non-standard way, for example through `getenv()` | Use string `define()` calls or adapt `WpConfig::parse()` to your environment |
+| «На сервере не включено ни PDO MySQL, ни mysqli» | The PHP MySQL extensions are missing | Enable `pdo_mysql` or `mysqli` in the hosting panel / `php.ini` |
+| «Недействительный токен сессии» | The session expired, cookies are blocked, the load balancer does not keep session affinity | Reload the page, allow cookies, check the PHP sessions configuration |
+| The password is not saved | The script directory is not writable, a temporary folder is used | Give the web user write access to the script directory |
+| The button shows «Выполняется…» for a long time | A large `postmeta` table, a MySQL lock or a PHP-FPM timeout | Enable debug, find the slow SQL, check the indexes and `request_terminate_timeout` |
+| Prices or stock are empty after cleaning | This is the expected state until the next exchange | Start the exchange in ItGalaxy and wait for it to finish |
+| Duplicates appeared after the exchange | SKUs do not match or are not unique | Fix the SKUs in 1C and WooCommerce, remove the incorrect duplicates, repeat a controlled exchange |
+| Stock is stale after the exchange | Object, page or CDN cache | `wp cache flush`, reset the WooCommerce and CDN cache |
 
 ---
 
 ## FAQ
 
-### Товары, изображения и описания точно останутся?
+### Will products, images and descriptions really stay?
 
-Да. Скрипт не содержит `DELETE` из `{prefix}posts`. Он не удаляет товары, вариации, артикулы, названия, описания, медиафайлы, категории или теги. Очищаются только служебные привязки обмена, цены, остатки и связанные кэш-значения.
+Yes. The script contains no `DELETE` from `{prefix}posts`. It does not delete products, variations, SKUs, titles, descriptions, media files, categories or tags. Only the exchange service links, prices, stock and the related cache values are cleaned.
 
-### Когда использовать скрипт?
+### When should the script be used?
 
-Основной случай — обновление версии или конфигурации 1С, перенос на другую базу, восстановление базы из бэкапа и другие ситуации, в которых старые GUID товаров, цен или складов перестали соответствовать данным новой 1С. Утилита удаляет старые ID; следующий обмен создаёт новые.
+The main case is an upgrade of the 1C version or configuration, a move to another database, a restore of the database from a backup and other situations where the old product, price or warehouse GUIDs no longer match the data of the new 1C. The utility deletes the old IDs; the next exchange creates new ones.
 
-### Почему после очистки товары снова «находятся» в 1С?
+### Why are products matched again in 1C after cleaning?
 
-Потому что плагин ItGalaxy при синхронизации сопоставляет товары по артикулу. Если артикулы идентичны и уникальны, плагин находит существующую карточку WooCommerce и записывает в неё актуальный ID / GUID из 1С вместо создания нового товара.
+Because the ItGalaxy plugin matches products by SKU during synchronization. If the SKUs are identical and unique, the plugin finds the existing WooCommerce product and writes the current ID / GUID from 1C into it instead of creating a new product.
 
-### Нужно ли очищать всё?
+### Should everything be cleared?
 
-Нет. Выбирайте минимально необходимую операцию. Если изменились только типы цен — используйте «Очистить цены». Если проблема только со складами — «Очистить остатки». «Очистить всё» подходит после полного обновления/переноса базы 1С, когда нет доверия всем старым идентификаторам.
+No. Choose the smallest operation you need. If only the price types changed — use «Очистить цены» (Clear prices). If the problem concerns warehouses only — «Очистить остатки» (Clear stock). «Очистить всё» (Clear everything) suits a full upgrade or migration of the 1C database, when none of the old identifiers can be trusted.
 
-### Можно ли отменить очистку?
+### Can the cleaning be undone?
 
-До конца HTTP-запроса ошибки откатываются транзакцией. После успешного `COMMIT` вернуть старые данные можно только из резервного дампа БД.
+Until the HTTP request completes, errors are rolled back by the transaction. After a successful `COMMIT` the old data can only be returned from a database backup dump.
 
-### Поддерживаются ли другие плагины обмена с 1С?
+### Are other 1C exchange plugins supported?
 
-Нет, готовая схема ключей ориентирована на ItGalaxy WooCommerce Synchronization 1C. Для других решений требуется отдельно проверить, где они хранят GUID, цены и остатки, и адаптировать константы в `Config`.
+No, the ready-made key scheme targets ItGalaxy WooCommerce Synchronization 1C. For other solutions you have to check separately where they store GUIDs, prices and stock, and adapt the constants in `Config`.
 
-### Поддерживается ли WordPress Multisite?
+### Is WordPress Multisite supported?
 
-Скрипт использует один `$table_prefix` из `wp-config.php` и по умолчанию работает с основным сайтом. Для подсайтов необходимо адаптировать префикс (`wp_2_`, `wp_3_` и т. п.) после предварительного бэкапа и теста на копии.
+The script uses a single `$table_prefix` from `wp-config.php` and works with the main site by default. For sub-sites the prefix must be adapted (`wp_2_`, `wp_3_` and so on) after a prior backup and a test on a copy.
 
-### Почему пароль привязан к IP?
+### Why is the password bound to an IP?
 
-Это дополнительный уровень удобства и защиты: после единственного успешного входа с доверенного рабочего адреса пароль не приходится вводить снова. При смене IP, при работе с другого компьютера или после сброса ACL потребуется сохранённый пароль.
-
----
-
-## Дорожная карта
-
-- [ ] `dry-run`: подробный подсчёт будущих изменений без модификации БД
-- [ ] Экспорт debug-журнала в JSON и текстовый файл
-- [ ] Выборочная очистка по категориям, товарам и диапазонам ID
-- [ ] Поддержка WordPress Multisite с выбором подсайта
-- [ ] Поддержка конфигураций ключей других плагинов 1С-обмена
-- [ ] Двухфакторное подтверждение деструктивных операций (TOTP)
-- [ ] Автоматическая проверка уникальности артикулов перед удалением GUID
+It is an extra layer of convenience and protection: after a single successful sign-in from a trusted work address the password does not have to be entered again. When the IP changes, when working from another computer or after an ACL reset, the saved password is required.
 
 ---
 
-## Лицензия и автор
+## Roadmap
 
-Проект распространяется по лицензии [PolyForm Noncommercial 1.0.0](LICENSE) © 2026 Mikhail Deynekin. Программа поставляется «как есть», без гарантий; пользователь самостоятельно отвечает за бэкапы и последствия операций с данными.
+- [ ] `dry-run`: a detailed count of the upcoming changes without modifying the database
+- [ ] Export of the debug log to JSON and to a text file
+- [ ] Selective cleaning by categories, products and ID ranges
+- [ ] WordPress Multisite support with sub-site selection
+- [ ] Support for the key configurations of other 1C exchange plugins
+- [ ] Two-factor confirmation of destructive operations (TOTP)
+- [ ] Automatic SKU uniqueness check before deleting GUIDs
+
+---
+
+## License and author
+
+The project is distributed under the [PolyForm Noncommercial 1.0.0](LICENSE) license © 2026 Mikhail Deynekin. The program is provided "as is", without warranty; the user is solely responsible for backups and for the consequences of operations on data.
 
 **Mikhail Deynekin**
 
-- Сайт: [Deynekin.com](https://deynekin.com)
+- Website: [Deynekin.com](https://deynekin.com)
 - GitHub: [paulmann (Mikhail Deynekin)](https://github.com/paulmann/)
-- Репозиторий: [woocommerce-1c-data-cleaner](https://github.com/paulmann/woocommerce-1c-data-cleaner)
-- Другой инструмент: [Clean_BOM_Senior](https://github.com/paulmann/Clean_BOM_Senior) — очистка невидимых UTF-8 BOM и CRLF в исходных файлах
+- Repository: [woocommerce-1c-data-cleaner](https://github.com/paulmann/woocommerce-1c-data-cleaner)
+- Another tool: [Clean_BOM_Senior](https://github.com/paulmann/Clean_BOM_Senior) — removes invisible UTF-8 BOM and CRLF from source files
 
-Если инструмент помог корректно перепривязать каталог после обновления 1С — поставьте звезду репозиторию.
+If the tool helped you re-link a catalog correctly after a 1C upgrade — star the repository.
